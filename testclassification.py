@@ -175,11 +175,19 @@ def write_text_on_image(frame, text=""):
 
 def predict(model, sample):
     with torch.no_grad():
+        all_ratings = []
         sample = torch.tensor(sample, dtype=torch.float32).unsqueeze(0)  # add batch dimension
         output = model(sample)
         predicted_class = torch.argmax(output, dim=1).item()
+
+        for idx, val in enumerate(output[0]):
+            all_ratings.append((translation_dict[idx], round(float(val), 3)))
+
+
+        
         translated_prediction = translation_dict[predicted_class]
-        return translated_prediction
+        
+        return translated_prediction, all_ratings
 
 def predict_letter(frame, result):
     "takes the current hand object extruded from the frame and draws the model prediction on the screen"
@@ -198,18 +206,17 @@ def predict_letter(frame, result):
             global colorvector
 
             landmarks = landmarks.flatten() # is this right?
-            prediction = predict(model, landmarks)
+            prediction, all_ratings = predict(model, landmarks)
 
 
             if cv2.waitKey(1) == ord('a') and len(fullstring) <= len(correct_string): #change this to blinking somehow
-    
                 fullstring += prediction
 
                 if prediction == correct_string[len(fullstring)-1]:
                     colorvector[len(fullstring)-1] = 1
                 else:
                     colorvector[len(fullstring)-1] = 2
-                print(colorvector)
+                print(all_ratings)
 
 
 
