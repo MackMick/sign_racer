@@ -1,6 +1,4 @@
 # Ignore training data and large assets
 training_landmarks/
 testing_landmarks/
-*.pth
-*.task
 __pycache__/
