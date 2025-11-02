@@ -9,6 +9,8 @@ import numpy as np
 from model import ASL_MLP
 import torch
 
+from blink_test import FaceLandmarkerWrapper
+
 MARGIN = 10  # pixels
 FONT_SIZE = 1
 FONT_THICKNESS = 4
@@ -94,7 +96,6 @@ def draw_landmarks_on_image(rgb_image, detection_result: mp.tasks.vision.HandLan
    except:
       return rgb_image
 
-
 def write_text_on_image(frame, text=""):
     font                   = cv2.FONT_HERSHEY_SIMPLEX
     bottomLeftCornerOfText = (250,250)
@@ -171,23 +172,16 @@ def write_text_on_image(frame, text=""):
 
     return frame
 
-
-
 def predict(model, sample):
     with torch.no_grad():
         all_ratings = []
         sample = torch.tensor(sample, dtype=torch.float32).unsqueeze(0)  # add batch dimension
         output = model(sample)
         predicted_class = torch.argmax(output, dim=1).item()
-
-        for idx, val in enumerate(output[0]):
-            all_ratings.append((translation_dict[idx], round(float(val), 3)))
-
-
-        
         translated_prediction = translation_dict[predicted_class]
-        
-        return translated_prediction, all_ratings
+
+        return translated_prediction
+
 
 def predict_letter(frame, result):
     "takes the current hand object extruded from the frame and draws the model prediction on the screen"
@@ -206,7 +200,7 @@ def predict_letter(frame, result):
             global colorvector
 
             landmarks = landmarks.flatten() # is this right?
-            prediction, all_ratings = predict(model, landmarks)
+            prediction = predict(model, landmarks) #we should probably just return the prediction
 
 
             if cv2.waitKey(1) == ord('a') and len(fullstring) <= len(correct_string): #change this to blinking somehow
@@ -216,9 +210,6 @@ def predict_letter(frame, result):
                     colorvector[len(fullstring)-1] = 1
                 else:
                     colorvector[len(fullstring)-1] = 2
-                print(all_ratings)
-
-
 
             frame = write_text_on_image(frame,prediction) #draw the predicted letter on the image
         return frame #add the things to the frame properly
@@ -230,7 +221,10 @@ def predict_letter(frame, result):
 def main():
     cap = cv2.VideoCapture(0)
 
-    # create landmarker
+    #create face landmarker
+    face_landmarker = FaceLandmarkerWrapper()
+
+    # create hand landmarker
     hand_landmarker = Landmarker()
 
     while True:
@@ -244,6 +238,19 @@ def main():
         
         frame = predict_letter(frame, hand_landmarker.result) # predicts the letter based on the hand posture and shows the letter on screen
         
+        face_landmarks = face_landmarker.detect(frame)
+
+    
+        if face_landmarks is not None: #here is where we should check for input?
+            frame = face_landmarker.draw(frame, face_landmarks)
+
+            #Should we put input flipflop here?
+            inputflag = face_landmarker.take_input(face_landmarks) # returns true if we should enter the character
+
+            #if inputflag == True:
+
+
+
         frame = draw_landmarks_on_image(frame, hand_landmarker.result) #should perhaps reorder this to draw afterwards
 
         # display image
@@ -251,7 +258,6 @@ def main():
 
         if cv2.waitKey(1) == ord('q'):
             break
-
     # release everything
     hand_landmarker.close()
     cap.release()
