@@ -1,37 +1,39 @@
 import mediapipe as mp
 import time
 
-class Landmarker():
-   def __init__(self):
-      self.result = mp.tasks.vision.HandLandmarkerResult
-      self.landmarker = mp.tasks.vision.HandLandmarker
-      self.createLandmarker()
-   
-   def createLandmarker(self):
-      # callback function
-      def update_result(result: mp.tasks.vision.HandLandmarkerResult, output_image: mp.Image, timestamp_ms: int):
-         self.result = result
+class Landmarker:
+    def __init__(self):
+        self.landmarker = self.create_landmarker()
+        self.timestamp = 0  # needed for detect_for_video
 
-      # HandLandmarkerOptions (details here: https://developers.google.com/mediapipe/solutions/vision/hand_landmarker/python#live-stream)
-      options = mp.tasks.vision.HandLandmarkerOptions( 
-         base_options = mp.tasks.BaseOptions(model_asset_path="hand_landmarker.task"), # path to model
-         running_mode = mp.tasks.vision.RunningMode.LIVE_STREAM, # running on a live stream
-         num_hands = 1, # track both hands -> change to 2
-         min_hand_detection_confidence = 0.5, # lower than value to get predictions more often
-         min_hand_presence_confidence = 0.5, # lower than value to get predictions more often
-         min_tracking_confidence = 0.5, # lower than value to get predictions more often
-         result_callback=update_result)
-      
-      # initialize landmarker
-      self.landmarker = self.landmarker.create_from_options(options)
-   
-   def detect_async(self, frame):
-      # convert np frame to mp image
-      mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
-      # detect landmarks
-      self.landmarker.detect_async(image = mp_image, timestamp_ms = int(time.time() * 1000))
+    def create_landmarker(self):
+        BaseOptions = mp.tasks.BaseOptions
+        HandLandmarker = mp.tasks.vision.HandLandmarker
+        HandLandmarkerOptions = mp.tasks.vision.HandLandmarkerOptions
+        VisionRunningMode = mp.tasks.vision.RunningMode
 
-   def close(self):
-      # close landmarker
-      self.landmarker.close()
+        options = HandLandmarkerOptions(
+            base_options = BaseOptions(model_asset_path="hand_landmarker.task"),
+            running_mode = VisionRunningMode.VIDEO,     # <<— CHANGE
+            num_hands = 1,
+            min_hand_detection_confidence = 0.5,
+            min_hand_presence_confidence = 0.5,
+            min_tracking_confidence = 0.5,
+        )
 
+        return HandLandmarker.create_from_options(options)
+
+    def detect(self, frame):
+        """Runs synchronous detection and returns the result."""
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
+
+        result = self.landmarker.detect_for_video(
+            mp_image,
+            self.timestamp
+        )
+        self.timestamp += 1
+
+        return result
+
+    def close(self):
+        self.landmarker.close()

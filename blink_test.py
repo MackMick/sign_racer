@@ -53,7 +53,7 @@ class FaceLandmarkerWrapper:
         LEFT_EYE_IMPORTANT = {386,374,362,263}#upper,lower,left,right
         RIGHT_EYE_IMPORTANT = {159,145,33,133} #upper,lower,left,right
 
-        threshold = 0.2
+        threshold = 0.25
 
         #left eye
         left_upper = landmarks[0].landmark[386]
@@ -82,7 +82,6 @@ class FaceLandmarkerWrapper:
         right_ratio = right_up_down_dist / right_left_right_dist
 
         ratio = (right_ratio + left_ratio)/2
-        
         
         #under 0.2 -> stängda ögon?
         if ratio < threshold and self.open == True:

@@ -11,14 +11,11 @@ import torch
 
 from blink_test import FaceLandmarkerWrapper
 
-MARGIN = 10  # pixels
-FONT_SIZE = 1
-FONT_THICKNESS = 4
-HANDEDNESS_TEXT_COLOR = (88, 205, 54) # vibrant green
+from getfromdatabase import get_text
 
-correct_string = "THIS IS A SAMPLE"
+correct_string = ""
 current_pos = 0
-colorvector = [0] * len(correct_string) # makes empty array -> 
+colorvector = [] # makes empty array -> 
 #0 -> not yet seen, 1 -> correct, 2 -> wrong
 #we should really make this a real lookup thing instead of just arbitrarily ascribing colors to numbers
 
@@ -27,12 +24,6 @@ fullstring = ""
 skinny_set = {"I"}
 
 adjusted_placements = [20] # list to make sure all letters are placed in a good manner -> distinguish between thin and wide letters
-for pos in range(1,len(correct_string)):
-    if correct_string[pos- 1] in skinny_set:
-        adjusted_placements.append(15)
-    else:
-        adjusted_placements.append(40)
-
 
 model = ASL_MLP()
 model.load_state_dict(torch.load("asl_mlp_model25.pth", weights_only=True))
@@ -97,6 +88,7 @@ def draw_landmarks_on_image(rgb_image, detection_result: mp.tasks.vision.HandLan
       return rgb_image
 
 def write_text_on_image(frame, text=""):
+
     font                   = cv2.FONT_HERSHEY_SIMPLEX
     bottomLeftCornerOfText = (250,250)
     fontScale              = 2
@@ -120,7 +112,6 @@ def write_text_on_image(frame, text=""):
             lineType)
     
     #TO ADD: check here if it is the correct letter -> different color if wrong
-
     right_color = (0,255,0) #green
     wrong_color = (0,0,255) #red
     current_color = (255,255,0) #blue
@@ -146,7 +137,7 @@ def write_text_on_image(frame, text=""):
         
         if char == " ":
             char = "_"
-
+        
         cv2.putText(frame,char, 
             adjusted_placement, 
             font, 
@@ -154,14 +145,14 @@ def write_text_on_image(frame, text=""):
             color,
             thickness,
             lineType)
-    
+        
     if len(fullstring) == len(correct_string):
         accuracy = colorvector.count(1)/len(colorvector) * 100
         resultstext = f"your final accuracy was: {accuracy}%"
         resultsplacement = (50,50)
         resultsscale = 1
         resultcolor = (0,255,255)
-
+        
         cv2.putText(frame,resultstext, 
             resultsplacement, 
             font, 
@@ -169,12 +160,11 @@ def write_text_on_image(frame, text=""):
             resultcolor,
             thickness,
             lineType)
-
+        
     return frame
 
 def predict(model, sample):
     with torch.no_grad():
-        all_ratings = []
         sample = torch.tensor(sample, dtype=torch.float32).unsqueeze(0)  # add batch dimension
         output = model(sample)
         predicted_class = torch.argmax(output, dim=1).item()
@@ -188,7 +178,7 @@ def predict(model, sample):
 def predict_letter(frame, result):
     "takes the current hand object extruded from the frame and draws the model prediction on the screen"
     try:
-        if result.hand_world_landmarks == []:
+        if result.hand_world_landmarks == []: #if 
             frame = write_text_on_image(frame) #only draw saved part
             return frame, None
         else:
@@ -213,7 +203,6 @@ def get_input(prediction):
     global correct_string
     global colorvector
     
-
     if len(fullstring) <= len(correct_string) and prediction:
         fullstring += prediction
 
@@ -223,9 +212,24 @@ def get_input(prediction):
             colorvector[len(fullstring)-1] = 2
     return
 
-
 def main():
     cap = cv2.VideoCapture(0)
+
+    #get text
+    global correct_string 
+    global colorvector
+    global adjusted_placements
+    
+    correct_string = get_text().upper() # gets the text to be written from the database
+
+    colorvector = [0] * len(correct_string)
+
+    for pos in range(1,len(correct_string)):
+        if correct_string[pos- 1] in skinny_set:
+            adjusted_placements.append(15)
+        else:
+            adjusted_placements.append(40)
+
 
     #create face landmarker
     face_landmarker = FaceLandmarkerWrapper()
@@ -239,10 +243,10 @@ def main():
         # mirror frame
         frame = cv2.flip(frame, 1)
         # update landmarker results
-        hand_landmarker.detect_async(frame)
+        hand_result = hand_landmarker.detect(frame)
         # draw landmarks on frame
         
-        frame, prediction = predict_letter(frame, hand_landmarker.result) # predicts the letter based on the hand posture and shows the letter on screen
+        frame, prediction = predict_letter(frame, hand_result) # predicts the letter based on the hand posture and shows the letter on screen
         
         face_landmarks = face_landmarker.detect(frame)
 
@@ -253,22 +257,18 @@ def main():
             #Should we put input flipflop here?
             inputflag = face_landmarker.take_input(face_landmarks) # returns true if we should enter the character
             if inputflag:
-                print("GETTING INPUT", prediction)
                 get_input(prediction)
                 write_text_on_image(frame, prediction)
 
-            #print(inputflag)
 
-
-
-        frame = draw_landmarks_on_image(frame, hand_landmarker.result) #should perhaps reorder this to draw afterwards
+        frame = draw_landmarks_on_image(frame, hand_result) #should perhaps reorder this to draw afterwards
 
         # display image
         cv2.imshow('frame',frame)
 
         if cv2.waitKey(1) == ord('q'):
             break
-    # release everything
+
     hand_landmarker.close()
     cap.release()
     cv2.destroyAllWindows()
