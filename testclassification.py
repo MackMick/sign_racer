@@ -108,7 +108,7 @@ def write_text_on_image(frame, text=""):
     global correct_string
     global adjusted_placements
 
-    if len(text) > 0:
+    if text != "":
         if text == " ":
             text = "(SPACE)"
         cv2.putText(frame,text, 
@@ -183,39 +183,45 @@ def predict(model, sample):
         return translated_prediction
 
 
+#move out all write_text_on_image
+
 def predict_letter(frame, result):
     "takes the current hand object extruded from the frame and draws the model prediction on the screen"
     try:
         if result.hand_world_landmarks == []:
             frame = write_text_on_image(frame) #only draw saved part
-            return frame
+            return frame, None
         else:
             #transform the landmarks to the same format as the classifier is used to
             landmarks = np.array([[lm.x, lm.y, lm.z] for lm in result.hand_world_landmarks[0]])
             landmarks -= landmarks[0]
             scale = np.linalg.norm(landmarks[9] - landmarks[0])  # scales mean bone length
             landmarks /= scale
-            global fullstring
-            global correct_string
-            global colorvector
 
             landmarks = landmarks.flatten() # is this right?
             prediction = predict(model, landmarks) #we should probably just return the prediction
 
-
-            if cv2.waitKey(1) == ord('a') and len(fullstring) <= len(correct_string): #change this to blinking somehow
-                fullstring += prediction
-
-                if prediction == correct_string[len(fullstring)-1]:
-                    colorvector[len(fullstring)-1] = 1
-                else:
-                    colorvector[len(fullstring)-1] = 2
-
             frame = write_text_on_image(frame,prediction) #draw the predicted letter on the image
-        return frame #add the things to the frame properly
+        return frame, prediction #add the things to the frame properly
     except Exception as e:
         print("Predict error: ", e)
-        return frame
+        return frame, None
+
+def get_input(prediction):
+
+    global fullstring
+    global correct_string
+    global colorvector
+    
+
+    if len(fullstring) <= len(correct_string) and prediction:
+        fullstring += prediction
+
+        if prediction == correct_string[len(fullstring)-1]:
+            colorvector[len(fullstring)-1] = 1
+        else:
+            colorvector[len(fullstring)-1] = 2
+    return
 
 
 def main():
@@ -236,7 +242,7 @@ def main():
         hand_landmarker.detect_async(frame)
         # draw landmarks on frame
         
-        frame = predict_letter(frame, hand_landmarker.result) # predicts the letter based on the hand posture and shows the letter on screen
+        frame, prediction = predict_letter(frame, hand_landmarker.result) # predicts the letter based on the hand posture and shows the letter on screen
         
         face_landmarks = face_landmarker.detect(frame)
 
@@ -246,8 +252,12 @@ def main():
 
             #Should we put input flipflop here?
             inputflag = face_landmarker.take_input(face_landmarks) # returns true if we should enter the character
+            if inputflag:
+                print("GETTING INPUT", prediction)
+                get_input(prediction)
+                write_text_on_image(frame, prediction)
 
-            #if inputflag == True:
+            #print(inputflag)
 
 
 

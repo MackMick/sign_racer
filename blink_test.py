@@ -1,12 +1,15 @@
 import mediapipe as mp
 from mediapipe.framework.formats import landmark_pb2
 import cv2
+import numpy as np
+import math
 
 class FaceLandmarkerWrapper:
     def __init__(self, model_path="face_landmarker.task"):
         self.model_path = model_path
         self.timestamp = 0
         self.landmarker = self._init_landmarker()
+        self.open = True #are the eyes open?
 
     def _init_landmarker(self):
         BaseOptions = mp.tasks.BaseOptions
@@ -45,8 +48,48 @@ class FaceLandmarkerWrapper:
 
 
     def take_input(self, landmarks):
+        #seperate out distance calculations to a helper function instead, also the translating?
         flag = False
+        LEFT_EYE_IMPORTANT = {386,374,362,263}#upper,lower,left,right
+        RIGHT_EYE_IMPORTANT = {159,145,33,133} #upper,lower,left,right
 
+        threshold = 0.2
+
+        #left eye
+        left_upper = landmarks[0].landmark[386]
+        left_lower = landmarks[0].landmark[374]
+        left_left = landmarks[0].landmark[362]
+        left_right = landmarks[0].landmark[263]
+
+        left_up_down_dist = np.linalg.norm(np.array([left_upper.x, left_upper.y]) - np.array([left_lower.x, left_lower.y]))
+        left_left_right_dist = np.linalg.norm(np.array([left_left.x, left_left.y]) - np.array([left_right.x, left_right.y]))
+
+        left_ratio = left_up_down_dist/left_left_right_dist
+        
+        right_upper = landmarks[0].landmark[159]
+        right_lower = landmarks[0].landmark[145]
+        right_left  = landmarks[0].landmark[33]
+        right_right = landmarks[0].landmark[133]
+
+        right_up_down_dist = np.linalg.norm(
+            np.array([right_upper.x, right_upper.y]) - np.array([right_lower.x, right_lower.y])
+        )
+
+        right_left_right_dist = np.linalg.norm(
+            np.array([right_left.x, right_left.y]) - np.array([right_right.x, right_right.y])
+        )
+
+        right_ratio = right_up_down_dist / right_left_right_dist
+
+        ratio = (right_ratio + left_ratio)/2
+        
+        
+        #under 0.2 -> stängda ögon?
+        if ratio < threshold and self.open == True:
+            self.open = False
+            return True
+        elif ratio > threshold:
+            self.open = True
 
         return flag
 
@@ -57,16 +100,20 @@ class FaceLandmarkerWrapper:
         mp_styles = mp.solutions.drawing_styles
         mp_mesh = mp.solutions.face_mesh
 
+        LEFT_EYE_INDEXES = {33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246}
+        RIGHT_EYE_INDEXES = {263, 249, 390, 373, 374, 380, 381, 382, 362, 398, 384, 385, 386, 387, 388, 466}
+        EYE_INDEXES = LEFT_EYE_INDEXES | RIGHT_EYE_INDEXES
+
+
         for lm_proto in landmarks:
+            eyes = landmark_pb2.NormalizedLandmarkList(landmark=[lm_proto.landmark[i] for i in EYE_INDEXES])
+
             mp_drawing.draw_landmarks(
                 image=frame,
-                landmark_list=lm_proto,
-                connections=mp_mesh.FACEMESH_TESSELATION,
-                landmark_drawing_spec=None,
-                connection_drawing_spec=mp_styles.get_default_face_mesh_tesselation_style()
+                landmark_list=eyes,
+                landmark_drawing_spec=mp_drawing.DrawingSpec(color=(0, 255, 0), thickness=1, circle_radius=1),
+                connections=None
             )
-
-
 
         return frame
     
