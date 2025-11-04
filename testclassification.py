@@ -178,8 +178,7 @@ def predict(model, sample):
 def predict_letter(frame, result):
     "takes the current hand object extruded from the frame and draws the model prediction on the screen"
     try:
-        if result.hand_world_landmarks == []: #if 
-            frame = write_text_on_image(frame) #only draw saved part
+        if result.hand_world_landmarks == []:
             return frame, None
         else:
             #transform the landmarks to the same format as the classifier is used to
@@ -191,7 +190,6 @@ def predict_letter(frame, result):
             landmarks = landmarks.flatten() # is this right?
             prediction = predict(model, landmarks) #we should probably just return the prediction
 
-            frame = write_text_on_image(frame,prediction) #draw the predicted letter on the image
         return frame, prediction #add the things to the frame properly
     except Exception as e:
         print("Predict error: ", e)
@@ -212,6 +210,7 @@ def get_input(prediction):
             colorvector[len(fullstring)-1] = 2
     return
 
+'''
 def main():
     cap = cv2.VideoCapture(0)
 
@@ -264,7 +263,10 @@ def main():
         frame = draw_landmarks_on_image(frame, hand_result) #should perhaps reorder this to draw afterwards
 
         # display image
-        cv2.imshow('frame',frame)
+        combined = draw_ui(frame, correct_string, fullstring)
+
+        #cv2.imshow('frame',frame)
+        cv2.imshow('frame',combined)
 
         if cv2.waitKey(1) == ord('q'):
             break
@@ -272,6 +274,8 @@ def main():
     hand_landmarker.close()
     cap.release()
     cv2.destroyAllWindows()
+'''
+    
 
-if __name__ == "__main__":
-    main()
+#if __name__ == "__main__":
+#    main()
