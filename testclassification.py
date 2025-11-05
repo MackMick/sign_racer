@@ -13,17 +13,6 @@ from blink_test import FaceLandmarkerWrapper
 
 from getfromdatabase import get_text
 
-correct_string = ""
-current_pos = 0
-colorvector = [] # makes empty array -> 
-#0 -> not yet seen, 1 -> correct, 2 -> wrong
-#we should really make this a real lookup thing instead of just arbitrarily ascribing colors to numbers
-
-fullstring = ""
-
-skinny_set = {"I"}
-
-adjusted_placements = [20] # list to make sure all letters are placed in a good manner -> distinguish between thin and wide letters
 
 model = ASL_MLP()
 model.load_state_dict(torch.load("asl_mlp_model25.pth", weights_only=True))

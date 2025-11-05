@@ -6,9 +6,13 @@ from PyQt5.QtGui import QImage, QPixmap, QFont
 from PyQt5.QtCore import QTimer
 from PyQt5.QtWidgets import QSizePolicy
 
+from camera_mapping import open_camera_prefer_path
+
 from prompt_display import PromptDisplay
 
 from PyQt5.QtCore import Qt
+
+import numpy as np
 
 # Fix for missing Qt plugins
 import os, PyQt5.QtCore
@@ -24,6 +28,102 @@ from testclassification import (
     get_text, model
 )
 
+import cv2, time, os
+import numpy as np
+
+def _looks_color(frame: np.ndarray) -> bool:
+    if frame is None or frame.ndim != 3 or frame.shape[2] != 3:
+        return False
+    # IR greyscale => channels ~identical; color has variance between channels
+    c01 = np.std(frame[:, :, 0] - frame[:, :, 1])
+    c12 = np.std(frame[:, :, 1] - frame[:, :, 2])
+    return (c01 > 1.0) or (c12 > 1.0)
+
+def _warmup_and_check(cap, attempts=8, sleep=0.02) -> bool:
+    ok = False
+    for _ in range(attempts):
+        ret, f = cap.read()
+        if ret and _looks_color(f):
+            ok = True
+            break
+        time.sleep(sleep)
+    return ok
+
+def _try_open_index(i: int) -> bool:
+    """Try several backend/format combos on index i. Return True on color frames."""
+    # 1) Default backend, MJPG 1280x720
+    cap = cv2.VideoCapture(i)  # no CAP_V4L2 here
+    if cap.isOpened():
+        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+        cap.set(cv2.CAP_PROP_FPS, 30)
+        if _warmup_and_check(cap):
+            cap.release()
+            return True
+        cap.release()
+
+    # 2) Default backend, YUYV 640x480 (very compatible)
+    cap = cv2.VideoCapture(i)
+    if cap.isOpened():
+        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"YUYV"))
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+        cap.set(cv2.CAP_PROP_FPS, 30)
+        if _warmup_and_check(cap):
+            cap.release()
+            return True
+        cap.release()
+
+    # 3) Explicit V4L2 backend, MJPG 1280x720
+    cap = cv2.VideoCapture(i, cv2.CAP_V4L2)
+    if cap.isOpened():
+        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+        cap.set(cv2.CAP_PROP_FPS, 30)
+        if _warmup_and_check(cap):
+            cap.release()
+            return True
+        cap.release()
+
+    # 4) Explicit V4L2 backend, YUYV 640x480
+    cap = cv2.VideoCapture(i, cv2.CAP_V4L2)
+    if cap.isOpened():
+        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"YUYV"))
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+        cap.set(cv2.CAP_PROP_FPS, 30)
+        if _warmup_and_check(cap):
+            cap.release()
+            return True
+        cap.release()
+
+    return False
+
+def find_working_camera(max_tested=6):
+    """Return the index of a camera that yields color frames."""
+    # Optional: force an index (e.g., CAM_INDEX=0)
+    env_idx = os.getenv("CAM_INDEX")
+    if env_idx and env_idx.isdigit():
+        i = int(env_idx)
+        if _try_open_index(i):
+            print(f"✅ Using camera index {i} (env override)")
+            return i
+
+    # Prefer 0 first; IR is often 2
+    order = list(range(min(max_tested, 6)))
+    if 0 in order:
+        order.remove(0)
+        order.insert(0, 0)
+
+    for i in order:
+        if _try_open_index(i):
+            print(f"✅ Using camera index {i}")
+            return i
+
+    print("⚠️  No suitable color camera found.")
+    return None
 
 class ASLApp(QWidget):
     def __init__(self):
@@ -32,7 +132,17 @@ class ASLApp(QWidget):
         self.resize(2000, 700)
 
         # --- Video capture ---
-        self.cap = cv2.VideoCapture(0)
+        camera_index = find_working_camera()
+        if camera_index is None:
+            raise RuntimeError("No camera found — please check your device.")
+
+        self.cap = cv2.VideoCapture(camera_index)      # let OpenCV pick backend
+        # Optional: lock what worked best for you
+        #self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"YUYV"))
+        #self.cap.set(cv2.CAP_PROP_FRAME_WIDTH,  640)
+        #self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+        #self.cap.set(cv2.CAP_PROP_FPS, 30)
+        
         self.last_time = time.time()
 
         # --- Landmarkers ---
@@ -87,6 +197,13 @@ class ASLApp(QWidget):
         self.timer.timeout.connect(self.update_frame)
         self.timer.start(30)
 
+    def reset_prompt(self):
+        self.correct_string = get_text().upper()
+        self.fullstring = ""
+        self.colorvector = [0] * len(self.correct_string)
+
+        self.prompt_display.reset(self.correct_string)
+
     def update_frame(self):
         ret, frame = self.cap.read()
         if not ret:
@@ -97,7 +214,9 @@ class ASLApp(QWidget):
         frame, prediction = predict_letter(frame, hand_result)
 
         self.current_letter = prediction
-        self.show_current_letter.setText(prediction)
+
+        letter_to_show= prediction if prediction != " " else "(SPACE)"
+        self.show_current_letter.setText(f"Currently: {letter_to_show}")
 
         # Face detection & blink trigger
         face_landmarks = self.face_landmarker.detect(frame)
@@ -107,6 +226,13 @@ class ASLApp(QWidget):
                 if prediction:
                     self.fullstring += prediction
                     self.prompt_display.type_letter(prediction)
+        
+        #resets the 
+        if len(self.fullstring) == len(self.correct_string):
+            time.sleep(5)
+            self.reset_prompt()
+
+
 
         frame = draw_landmarks_on_image(frame, hand_result)
 

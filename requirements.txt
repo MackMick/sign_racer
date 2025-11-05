@@ -1,0 +1,6 @@
+mediapipe==0.10.21
+opencv-contrib-python==4.11.0.86
+PyQt5==5.15.11
+torch==2.9.0
+numpy==1.26.4
+protobuf==4.25.8

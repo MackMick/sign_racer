@@ -1,0 +1,7 @@
+# Ignore dataset directories
+*.csv
+*.jsonl
+*.npy
+*.npz
+testing_landmarks/
+training_landmarks/

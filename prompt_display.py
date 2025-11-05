@@ -21,6 +21,9 @@ class PromptDisplay(QTextEdit):
         self.setStyleSheet("background-color: #222; border: none; color: white;")
         self.update_display()
 
+    def reset(self, correct_text: str):
+        self.__init__(correct_text)
+
     def update_display(self):
         """Redraws the text with updated colors."""
         cursor = self.textCursor()
