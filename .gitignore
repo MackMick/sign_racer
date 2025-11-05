@@ -2,3 +2,4 @@
 training_landmarks/
 testing_landmarks/
 __pycache__/
+venv/
