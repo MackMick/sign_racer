@@ -1,5 +1,17 @@
-# Ignore training data and large assets
-training_landmarks/
-testing_landmarks/
-__pycache__/
 venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.mp4
+*.avi
+*.mov
+*.pth
+*.npy
+*.h5
+*.onnx
+*.zip
+*.tar
+*.gz
+datasets/
+testing_landmarks/
