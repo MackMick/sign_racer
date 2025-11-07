@@ -22,7 +22,7 @@ os.environ["QT_PLUGIN_PATH"] = _base
 os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = os.path.join(_base, "platforms")
 
 # Import helper functions
-from testclassification import (
+from utilities import (
     Landmarker, FaceLandmarkerWrapper,
     predict_letter, draw_landmarks_on_image,
     get_text, model

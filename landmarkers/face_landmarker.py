@@ -3,9 +3,13 @@ from mediapipe.framework.formats import landmark_pb2
 import cv2
 import numpy as np
 import math
+import os 
 
 class FaceLandmarkerWrapper:
-    def __init__(self, model_path="face_landmarker.task"):
+    def __init__(self, model_path="landmarkers/face_landmarker.task"):
+        
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        model_path = os.path.join(script_dir, "face_landmarker.task")
         self.model_path = model_path
         self.timestamp = 0
         self.landmarker = self._init_landmarker()

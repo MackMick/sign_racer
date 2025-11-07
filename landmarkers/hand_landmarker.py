@@ -1,5 +1,6 @@
 import mediapipe as mp
 import time
+import os
 
 class Landmarker:
     def __init__(self):
@@ -12,9 +13,12 @@ class Landmarker:
         HandLandmarkerOptions = mp.tasks.vision.HandLandmarkerOptions
         VisionRunningMode = mp.tasks.vision.RunningMode
 
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        model_path = os.path.join(script_dir, "hand_landmarker.task")
+
         options = HandLandmarkerOptions(
-            base_options = BaseOptions(model_asset_path="hand_landmarker.task"),
-            running_mode = VisionRunningMode.VIDEO,     # <<— CHANGE
+            base_options = BaseOptions(model_asset_path=model_path),
+            running_mode = VisionRunningMode.VIDEO,
             num_hands = 1,
             min_hand_detection_confidence = 0.5,
             min_hand_presence_confidence = 0.5,

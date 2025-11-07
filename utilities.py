@@ -1,7 +1,7 @@
 import cv2
 import time
 import mediapipe as mp
-from landmarker_class import Landmarker
+from landmarkers.hand_landmarker import Landmarker
 from mediapipe import solutions
 from mediapipe.framework.formats import landmark_pb2
 import numpy as np
@@ -9,13 +9,13 @@ import numpy as np
 from model import ASL_MLP
 import torch
 
-from blink_test import FaceLandmarkerWrapper
+from landmarkers.face_landmarker import FaceLandmarkerWrapper
 
 from getfromdatabase import get_text
 
 
 model = ASL_MLP()
-model.load_state_dict(torch.load("asl_mlp_model25.pth", weights_only=True))
+model.load_state_dict(torch.load("training/asl_mlp_model25.pth", weights_only=True))
 model.eval()  # set model to evaluation mode
 
 #dictionary for translating all values from signed (right) hand
