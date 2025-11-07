@@ -18,7 +18,7 @@ python3 ui_main.py
 Pull the latest image:
 
 ```bash
-docker pull mikaellidman/asl-typeracer:latest
+docker pull strombologni/sign_racer:latest
 ```
 
 Run it (Linux example):
@@ -31,5 +31,5 @@ docker run -it --rm \
   --group-add video \
   -e DISPLAY=$DISPLAY \
   -v /tmp/.X11-unix:/tmp/.X11-unix \
-  mikaellidman/asl-typeracer:latest
+  strombologni/sign_racer:latest
 ```
