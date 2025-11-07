@@ -1,7 +1,7 @@
 import sys
 import cv2
 import time
-from PyQt5.QtWidgets import QApplication, QLabel, QWidget, QVBoxLayout, QHBoxLayout, QFrame, QCheckBox
+from PyQt5.QtWidgets import QApplication, QLabel, QWidget, QVBoxLayout, QHBoxLayout, QFrame, QCheckBox, QMessageBox
 from PyQt5.QtGui import QImage, QPixmap, QFont
 from PyQt5.QtCore import QTimer
 from PyQt5.QtWidgets import QSizePolicy
@@ -119,7 +119,7 @@ def find_working_camera(max_tested=6):
 
     for i in order:
         if _try_open_index(i):
-            print(f"✅ Using camera index {i}")
+            print(f"Using camera index {i}")
             return i
 
     print("No suitable color camera found.")
@@ -151,6 +151,8 @@ class ASLApp(QWidget):
         self.fullstring = ""
         self.colorvector = [0] * len(self.correct_string)
 
+        self.prompt_done = False
+
         # --- UI Setup ---
         self.video_label = QLabel()
         self.video_label.setStyleSheet("background-color: black; border-radius: 10px;")
@@ -162,7 +164,6 @@ class ASLApp(QWidget):
         self.status_label = QLabel("Status: Running")
         self.status_label.setFont(QFont("Arial", 16))
         self.status_label.setStyleSheet("color: #00FF88;")
-
 
         # --- Togglable buttons ---
         self.checkbox_style = """
@@ -214,6 +215,11 @@ class ASLApp(QWidget):
         self.show_current_letter.setFont(QFont("Monospace", 20))
         self.show_current_letter.setStyleSheet("color: #FFFFFF;")
 
+        # --- Display current time --- 
+        self.show_time = QLabel("Current time: ")
+        self.show_time.setFont(QFont("Monospace", 20))
+        self.show_time.setStyleSheet("color: #FFFFFF;")
+
         # --- Prompt display (colored text progress) ---
         self.prompt_display = PromptDisplay(self.correct_string)
 
@@ -222,6 +228,7 @@ class ASLApp(QWidget):
         right_layout = QVBoxLayout()
         right_layout.addWidget(self.status_label)
         right_layout.addWidget(self.prompt_display)
+        right_layout.addWidget(self.show_time)
         right_layout.addWidget(self.show_current_letter)
         right_layout.addWidget(self.spacebar_checkbox)
         right_layout.addWidget(self.lefthanded_checkbox)
@@ -281,6 +288,8 @@ class ASLApp(QWidget):
         self.fullstring = ""
         self.colorvector = [0] * len(self.correct_string)
 
+        self.prompt_done = False
+
         self.start_time = None
 
         self.prompt_display.reset(self.correct_string)
@@ -337,15 +346,18 @@ class ASLApp(QWidget):
         if len(self.fullstring) == 1 and self.start_time == None:
             self.start_time = time.time()
 
-        # --- Check if prompt is complete ---
-        if len(self.fullstring) == len(self.correct_string):
-            prompt_time = time.time() - self.start_time 
-            print(prompt_time)
-            time.sleep(5)
-            self.reset_prompt()
-            
-            
+        #update time indicator:
+        if self.start_time and not self.prompt_done:
+            self.show_time.setText("Time: " + str(round(time.time() - self.start_time, 2)))
 
+
+        # --- Check if prompt is complete ---
+        if len(self.fullstring) == len(self.correct_string) and not self.prompt_done:
+            self.prompt_done = True
+            prompt_time = time.time() - self.start_time 
+            self.show_time.setText("FINAL: " + str(round(prompt_time, 2)) + " seconds")
+            QTimer.singleShot(5000, self.reset_prompt)
+            
         # --- Draw landmarks on hand ---
         if self.draw_bool:
             frame = draw_landmarks_on_image(frame, hand_result)

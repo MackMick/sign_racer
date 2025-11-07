@@ -83,7 +83,6 @@ class FaceLandmarkerWrapper:
 
         ratio = (right_ratio + left_ratio)/2
         
-        #under 0.2 -> stängda ögon?
         if ratio < threshold and self.open == True:
             self.open = False
             return True
