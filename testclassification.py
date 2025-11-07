@@ -88,14 +88,15 @@ def predict(model, sample):
 
 #move out all write_text_on_image
 
-def predict_letter(frame, result):
+def predict_letter(frame, result, flipper = 1): #flipper checks for lefthanded checkbox
     "takes the current hand object extruded from the frame and draws the model prediction on the screen"
+    
     try:
         if result.hand_world_landmarks == []:
             return frame, None
         else:
             #transform the landmarks to the same format as the classifier is used to
-            landmarks = np.array([[lm.x, lm.y, lm.z] for lm in result.hand_world_landmarks[0]])
+            landmarks = np.array([[flipper*lm.x, lm.y, lm.z] for lm in result.hand_world_landmarks[0]])
             landmarks -= landmarks[0]
             scale = np.linalg.norm(landmarks[9] - landmarks[0])  # scales mean bone length
             landmarks /= scale

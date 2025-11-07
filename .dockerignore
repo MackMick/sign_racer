@@ -5,3 +5,32 @@
 *.npz
 testing_landmarks/
 training_landmarks/
+
+
+# Don't include your virtual environment
+venv/
+.env/
+__pycache__/
+*.pyc
+
+# Ignore git stuff
+.git/
+.gitignore
+
+# Ignore IDE/editor files
+.vscode/
+.idea/
+
+# Ignore temporary data or datasets
+testing_landmarks/
+*.log
+*.tmp
+
+# Ignore build/cache dirs
+build/
+dist/
+*.egg-info/
+
+# Ignore Docker’s own files if nested
+Dockerfile
+docker-compose.yml

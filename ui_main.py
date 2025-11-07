@@ -1,7 +1,7 @@
 import sys
 import cv2
 import time
-from PyQt5.QtWidgets import QApplication, QLabel, QWidget, QVBoxLayout, QHBoxLayout, QFrame
+from PyQt5.QtWidgets import QApplication, QLabel, QWidget, QVBoxLayout, QHBoxLayout, QFrame, QCheckBox
 from PyQt5.QtGui import QImage, QPixmap, QFont
 from PyQt5.QtCore import QTimer
 from PyQt5.QtWidgets import QSizePolicy
@@ -21,7 +21,7 @@ os.environ["QT_QPA_PLATFORM"] = "xcb"
 os.environ["QT_PLUGIN_PATH"] = _base
 os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = os.path.join(_base, "platforms")
 
-# Import your existing logic
+# Import helper functions
 from testclassification import (
     Landmarker, FaceLandmarkerWrapper,
     predict_letter, draw_landmarks_on_image,
@@ -108,7 +108,7 @@ def find_working_camera(max_tested=6):
     if env_idx and env_idx.isdigit():
         i = int(env_idx)
         if _try_open_index(i):
-            print(f"✅ Using camera index {i} (env override)")
+            print(f"Using camera index {i} (env override)")
             return i
 
     # Prefer 0 first; IR is often 2
@@ -122,7 +122,7 @@ def find_working_camera(max_tested=6):
             print(f"✅ Using camera index {i}")
             return i
 
-    print("⚠️  No suitable color camera found.")
+    print("No suitable color camera found.")
     return None
 
 class ASLApp(QWidget):
@@ -137,13 +137,10 @@ class ASLApp(QWidget):
             raise RuntimeError("No camera found — please check your device.")
 
         self.cap = cv2.VideoCapture(camera_index)      # let OpenCV pick backend
-        # Optional: lock what worked best for you
-        #self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"YUYV"))
-        #self.cap.set(cv2.CAP_PROP_FRAME_WIDTH,  640)
-        #self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-        #self.cap.set(cv2.CAP_PROP_FPS, 30)
         
         self.last_time = time.time()
+
+        self.start_time = None
 
         # --- Landmarkers ---
         self.hand_landmarker = Landmarker()
@@ -166,6 +163,50 @@ class ASLApp(QWidget):
         self.status_label.setFont(QFont("Arial", 16))
         self.status_label.setStyleSheet("color: #00FF88;")
 
+
+        # --- Togglable buttons ---
+        self.checkbox_style = """
+            QCheckBox {
+                font-size: 16px;
+                color: #FFFFFF;
+                spacing: 8px;
+            }
+            QCheckBox::indicator {
+                width: 20px;
+                height: 20px;
+                border: 2px solid #4CAF50;   /* border color */
+                border-radius: 4px;           /* slightly rounded */
+                background-color: white;      /* fill color */
+            }
+            QCheckBox::indicator:checked {
+                background-color: #4CAF50;    /* fill when checked */
+                border-color: #4CAF50;
+            }
+        """
+        self.lefthanded_bool = False
+
+        self.lefthanded_checkbox = QCheckBox("Sign with left hand?")
+        self.lefthanded_checkbox.stateChanged.connect(self.toggle_left)
+        self.lefthanded_checkbox.setStyleSheet(self.checkbox_style)
+
+        self.draw_bool = True
+
+        self.drawlandmarks_checkbox = QCheckBox("Draw Landmarks?")
+        self.drawlandmarks_checkbox.setChecked(True)
+        self.drawlandmarks_checkbox.stateChanged.connect(self.toggle_draw)
+        self.drawlandmarks_checkbox.setStyleSheet(self.checkbox_style)
+
+        # --- Spacebar input button
+        self.spacebar_bool = False
+        self.space_pressed = False
+        self.input_processed = False
+
+        self.setFocusPolicy(Qt.StrongFocus)
+
+        self.spacebar_checkbox = QCheckBox("SPACE for input?")
+        self.spacebar_checkbox.stateChanged.connect(self.toggle_spacebar)
+        self.spacebar_checkbox.setStyleSheet(self.checkbox_style)
+
         # --- Display current prediction ---
         self.current_letter = ""
 
@@ -182,6 +223,9 @@ class ASLApp(QWidget):
         right_layout.addWidget(self.status_label)
         right_layout.addWidget(self.prompt_display)
         right_layout.addWidget(self.show_current_letter)
+        right_layout.addWidget(self.spacebar_checkbox)
+        right_layout.addWidget(self.lefthanded_checkbox)
+        right_layout.addWidget(self.drawlandmarks_checkbox)
         right_layout.addStretch()
         right_frame.setLayout(right_layout)
         right_frame.setStyleSheet("background-color: #222; border-radius: 10px; padding: 20px;")
@@ -197,12 +241,71 @@ class ASLApp(QWidget):
         self.timer.timeout.connect(self.update_frame)
         self.timer.start(30)
 
+    def toggle_draw(self, button):
+        self.draw_bool = self.drawlandmarks_checkbox.isChecked()
+        print("drawing landmarks? : ", self.draw_bool)
+        self.video_label.setFocus()
+
+    def toggle_left(self, button):
+        self.lefthanded_bool = self.lefthanded_checkbox.isChecked()
+        print("left handed?: ", self.lefthanded_bool)
+        self.video_label.setFocus()
+
+    # --- Spacebar handling --- #use for other buttons also
+    def toggle_spacebar(self, button):
+        self.spacebar_bool = self.spacebar_checkbox.isChecked()
+        print("Spacebar mode:", self.spacebar_bool)
+        # give focus back to the video area or main window
+        self.video_label.setFocus()  # or self.setFocus()
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_Space and not event.isAutoRepeat():
+            self.space_pressed = True
+        else:
+            super().keyPressEvent(event)
+
+    def keyReleaseEvent(self, event):
+        if event.key() == Qt.Key_Space:
+            self.space_pressed = False
+        else:
+            super().keyReleaseEvent(event)
+
+    def keyReleaseEvent(self, event):
+        if event.key() == Qt.Key_Space:
+            self.space_pressed = False  # reset when released
+        else:
+            super().keyReleaseEvent(event)
+
     def reset_prompt(self):
         self.correct_string = get_text().upper()
         self.fullstring = ""
         self.colorvector = [0] * len(self.correct_string)
 
+        self.start_time = None
+
         self.prompt_display.reset(self.correct_string)
+
+    def process_input(self, prediction, face_landmarks):
+        """Handles both blink-based and spacebar-based input modes."""
+        if not self.spacebar_bool:
+            # Blink-based trigger
+            if self.face_landmarker.take_input(face_landmarks):
+                if prediction:
+                    self.fullstring += prediction
+                    self.prompt_display.type_letter(prediction)
+
+        else:
+            # Spacebar-based trigger (only once per press)
+            if self.space_pressed and not self.input_processed:
+                if prediction:
+                    self.fullstring += prediction
+                    self.prompt_display.type_letter(prediction)
+                    self.input_processed = True  # prevent multiple inputs per press
+
+            # Reset when spacebar released
+            if not self.space_pressed:
+                self.input_processed = False
+
 
     def update_frame(self):
         ret, frame = self.cap.read()
@@ -211,30 +314,41 @@ class ASLApp(QWidget):
 
         frame = cv2.flip(frame, 1)
         hand_result = self.hand_landmarker.detect(frame)
-        frame, prediction = predict_letter(frame, hand_result)
+
+        if self.lefthanded_bool:
+            frame, prediction = predict_letter(frame, hand_result, -1) #flips the reading
+        else:
+            frame, prediction = predict_letter(frame, hand_result)
 
         self.current_letter = prediction
 
-        letter_to_show= prediction if prediction != " " else "(SPACE)"
+        letter_to_show = prediction if prediction != " " else "(SPACE)"
         self.show_current_letter.setText(f"Currently: {letter_to_show}")
 
-        # Face detection & blink trigger
+        # --- Face detection ---
         face_landmarks = self.face_landmarker.detect(frame)
-        if face_landmarks is not None:
+        if face_landmarks is not None and self.draw_bool:
             frame = self.face_landmarker.draw(frame, face_landmarks)
-            if self.face_landmarker.take_input(face_landmarks):  # blink triggers input
-                if prediction:
-                    self.fullstring += prediction
-                    self.prompt_display.type_letter(prediction)
+
+            # Use a separate method to handle input logic
+            self.process_input(prediction, face_landmarks)
         
-        #resets the 
+
+        if len(self.fullstring) == 1 and self.start_time == None:
+            self.start_time = time.time()
+
+        # --- Check if prompt is complete ---
         if len(self.fullstring) == len(self.correct_string):
+            prompt_time = time.time() - self.start_time 
+            print(prompt_time)
             time.sleep(5)
             self.reset_prompt()
+            
+            
 
-
-
-        frame = draw_landmarks_on_image(frame, hand_result)
+        # --- Draw landmarks on hand ---
+        if self.draw_bool:
+            frame = draw_landmarks_on_image(frame, hand_result)
 
         # --- Convert to QImage for PyQt ---
         rgb_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
